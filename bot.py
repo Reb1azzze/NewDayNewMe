@@ -109,16 +109,35 @@ async def fetch_json(url: str) -> dict:
         return json.loads(text)
 
 
-async def get_weather(city: str) -> str:
-    """Погода с кэшированием"""
-    cache_key = get_weather_cache_key(city)
+def get_weather_emoji(weather_main: str, is_day: bool = True) -> str:
+    """Возвращает эмодзи по типу погоды от OpenWeatherMap"""
+    weather_map = {
+        "Clear": "☀️" if is_day else "🌙",
+        "Clouds": "☁️",
+        "Rain": "🌧️",
+        "Drizzle": "🌦️",
+        "Thunderstorm": "⛈️",
+        "Snow": "❄️",
+        "Mist": "🌫️",
+        "Fog": "🌫️",
+        "Haze": "🌫️",
+        "Smoke": "🌫️",
+        "Dust": "🌫️",
+        "Sand": "🌫️",
+        "Ash": "🌫️",
+        "Squall": "💨",
+        "Tornado": "🌪️",
+    }
+    return weather_map.get(weather_main, "🌤️")  # Фоллбэк
 
-    # Пробуем получить из кэша
+
+async def get_weather(city: str) -> tuple[str, str]:
+    """Погода с кэшированием. Возвращает (текст_погоды, эмодзи)"""
+    cache_key = get_weather_cache_key(city)
     cached = api_cache.get(cache_key)
     if cached:
-        return cached
+        return cached  # cached теперь кортеж (текст, эмодзи)
 
-    # Запрашиваем API
     try:
         url = (
             f"http://api.openweathermap.org/data/2.5/weather"
@@ -126,16 +145,24 @@ async def get_weather(city: str) -> str:
         )
         data = await fetch_json(url)
         if "main" not in data:
-            result = "🌍 Город не найден"
+            result = ("🌍 Город не найден", "🌍")
         else:
             temp = data["main"]["temp"]
             desc = data["weather"][0]["description"].capitalize()
-            result = f"{desc}, {temp}°C"
+            weather_main = data["weather"][0]["main"]  # "Clear", "Clouds", etc.
+
+            # Определяем, день или ночь (по восходу/закату)
+            sunrise = data["sys"]["sunrise"]
+            sunset = data["sys"]["sunset"]
+            now = datetime.now().timestamp()
+            is_day = sunrise < now < sunset
+
+            emoji = get_weather_emoji(weather_main, is_day)
+            result = (f"{desc}, {temp}°C", emoji)
     except Exception as e:
         logger.error(f"Weather API error: {e}")
-        result = "⚠️ Не удалось получить погоду"
+        result = ("⚠️ Не удалось получить погоду", "⚠️")
 
-    # Сохраняем в кэш
     api_cache.set(cache_key, result, ttl=CACHE_TTL_WEATHER)
     return result
 
@@ -205,14 +232,16 @@ async def build_digest(chat_id: int) -> str:
     city = settings["city"]
     city_name = city.split(",")[0]
 
-    weather = await get_weather(city)
+    # Получаем кортеж (текст, эмодзи) из get_weather
+    weather_text, weather_emoji = await get_weather(city)
     rates = await get_rates()
     news = await get_news()
+
     today = datetime.now().strftime("%d.%m.%Y")
 
     return (
-        f"📅 Сегодня: {today}\n\n"
-        f"🌤 Погода в {city_name}: {weather}\n\n"
+        f"🗓️ Сегодня: {today}\n\n"  # 📅 — всегда статичный
+        f"{weather_emoji} Погода в {city_name}: {weather_text}\n\n"  # Адаптивный эмодзи погоды
         f"💰 Курсы валют:\n{rates}\n\n"
         f"📰 Топ новость:\n{news}"
     )
