@@ -38,6 +38,7 @@ from database import (
 )
 from cache import api_cache, get_weather_cache_key, get_rates_cache_key, get_news_cache_key
 from keyboards import main_keyboard, city_keyboard, time_keyboard
+from utils import is_admin, get_weather_emoji
 
 # Команды для всех
 USER_COMMANDS = [
@@ -108,29 +109,6 @@ async def fetch_json(url: str) -> dict:
         resp.raise_for_status()
         text = await resp.text()
         return json.loads(text)
-
-
-def get_weather_emoji(weather_main: str, is_day: bool = True) -> str:
-    """Возвращает эмодзи по типу погоды от OpenWeatherMap"""
-    weather_map = {
-        "Clear": "☀️" if is_day else "🌙",
-        "Clouds": "☁️",
-        "Rain": "🌧️",
-        "Drizzle": "🌦️",
-        "Thunderstorm": "⛈️",
-        "Snow": "❄️",
-        "Mist": "🌫️",
-        "Fog": "🌫️",
-        "Haze": "🌫️",
-        "Smoke": "🌫️",
-        "Dust": "🌫️",
-        "Sand": "🌫️",
-        "Ash": "🌫️",
-        "Squall": "💨",
-        "Tornado": "🌪️",
-    }
-    return weather_map.get(weather_main, "🌤️")  # Фоллбэк
-
 
 async def get_weather(city: str) -> tuple[str, str]:
     """Погода с кэшированием. Возвращает (текст_погоды, эмодзи)"""
@@ -460,14 +438,9 @@ async def set_time(callback: CallbackQuery):
     logger.info(f"Time set: {time_str} for {chat_id}")
 
 
-# 🔥 АДМИН-КОМАНДЫ
-def is_admin(user_id: int) -> bool:
-    return user_id in ADMIN_IDS
-
-
 @dp.message(Command("stats"))
 async def cmd_stats(message: types.Message):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id,ADMIN_IDS):
         return
 
     stats = get_stats()
@@ -492,7 +465,7 @@ async def cmd_stats(message: types.Message):
 
 @dp.message(Command("broadcast"))
 async def cmd_broadcast(message: types.Message):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id,ADMIN_IDS):
         return
 
     # Получаем текст после команды
@@ -531,7 +504,7 @@ async def cmd_broadcast(message: types.Message):
 
 @dp.message(Command("user_info"))
 async def cmd_user_info(message: types.Message):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id,ADMIN_IDS):
         return
 
     # Получаем chat_id из аргумента
@@ -564,7 +537,7 @@ async def cmd_user_info(message: types.Message):
 
 @dp.message(Command("clear_cache"))
 async def cmd_clear_cache(message: types.Message):
-    if not is_admin(message.from_user.id):
+    if not is_admin(message.from_user.id,ADMIN_IDS):
         return
 
     count = api_cache.clear()
