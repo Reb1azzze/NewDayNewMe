@@ -18,6 +18,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiohttp import ClientSession, ClientTimeout
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from functools import partial
 
 from config import (
     TELEGRAM_TOKEN,
@@ -39,6 +40,7 @@ from database import (
 from cache import api_cache, get_weather_cache_key, get_rates_cache_key, get_news_cache_key
 from keyboards import main_keyboard, city_keyboard, time_keyboard
 from utils import is_admin, get_weather_emoji
+from services import build_digest, send_digest
 
 # Команды для всех
 USER_COMMANDS = [
@@ -104,139 +106,12 @@ class CitySearch(StatesGroup):
 
 
 # ====== API функции с кэшированием ======
-async def fetch_json(url: str) -> dict:
-    async with http_session.get(url, timeout=ClientTimeout(total=REQUEST_TIMEOUT)) as resp:
-        resp.raise_for_status()
-        text = await resp.text()
-        return json.loads(text)
-
-async def get_weather(city: str) -> tuple[str, str]:
-    """Погода с кэшированием. Возвращает (текст_погоды, эмодзи)"""
-    cache_key = get_weather_cache_key(city)
-    cached = api_cache.get(cache_key)
-    if cached:
-        return cached  # cached теперь кортеж (текст, эмодзи)
-
-    try:
-        url = (
-            f"http://api.openweathermap.org/data/2.5/weather"
-            f"?q={city}&appid={OPENWEATHER_API_KEY}&units=metric&lang=ru"
-        )
-        data = await fetch_json(url)
-        if "main" not in data:
-            result = ("🌍 Город не найден", "🌍")
-        else:
-            temp = data["main"]["temp"]
-            desc = data["weather"][0]["description"].capitalize()
-            weather_main = data["weather"][0]["main"]  # "Clear", "Clouds", etc.
-
-            # Определяем, день или ночь (по восходу/закату)
-            sunrise = data["sys"]["sunrise"]
-            sunset = data["sys"]["sunset"]
-            now = datetime.now().timestamp()
-            is_day = sunrise < now < sunset
-
-            emoji = get_weather_emoji(weather_main, is_day)
-            result = (f"{desc}, {temp}°C", emoji)
-    except Exception as e:
-        logger.error(f"Weather API error: {e}")
-        result = ("⚠️ Не удалось получить погоду", "⚠️")
-
-    api_cache.set(cache_key, result, ttl=CACHE_TTL_WEATHER)
-    return result
-
-
-async def get_rates() -> str:
-    """Курсы с кэшированием"""
-    cache_key = get_rates_cache_key()
-
-    cached = api_cache.get(cache_key)
-    if cached:
-        return cached
-
-    try:
-        url = "https://www.cbr-xml-daily.ru/daily_json.js"
-        cbr = await fetch_json(url)
-        usd = cbr["Valute"]["USD"]["Value"]
-        eur = cbr["Valute"]["EUR"]["Value"]
-        result = f"🇺🇸 USD: {usd:.2f} ₽\n🇪🇺 EUR: {eur:.2f} ₽"
-    except Exception as e:
-        logger.error(f"Rates error: {e}")
-        result = "⚠️ Не удалось получить курсы"
-
-    api_cache.set(cache_key, result, ttl=CACHE_TTL_RATES)
-    return result
-
-
-async def get_news() -> str:
-    """Новости с кэшированием"""
-    cache_key = get_news_cache_key()
-
-    cached = api_cache.get(cache_key)
-    if cached:
-        return cached
-
-    try:
-        url = (
-            f"https://newsapi.org/v2/everything?"
-            f"q=Россия&language=ru&sortBy=publishedAt&pageSize=1"
-            f"&apiKey={NEWS_API_KEY}"
-        )
-        data = await fetch_json(url)
-
-        if data.get("status") == "error":
-            logger.warning(f"NewsAPI: {data.get('message')}")
-            result = "📰 Новости временно недоступны"
-        elif not data.get("articles"):
-            result = "📰 Новостей пока нет"
-        else:
-            article = data["articles"][0]
-            title = article.get("title", "Без заголовка")
-            url = article.get("url", "#")
-            result = f"{title}\n🔗 {url}"
-    except Exception as e:
-        logger.error(f"News error: {e}")
-        result = "📰 Не удалось загрузить новости"
-
-    api_cache.set(cache_key, result, ttl=CACHE_TTL_NEWS)
-    return result
 
 
 # ====== Формирование сообщения ======
-async def build_digest(chat_id: int) -> str:
-    settings = get_user(chat_id)
-    if not settings:
-        settings = {"city": DEFAULT_CITY, "send_time": "09:00"}
-
-    city = settings["city"]
-    city_name = city.split(",")[0]
-
-    # Получаем кортеж (текст, эмодзи) из get_weather
-    weather_text, weather_emoji = await get_weather(city)
-    rates = await get_rates()
-    news = await get_news()
-
-    today = datetime.now().strftime("%d.%m.%Y")
-
-    return (
-        f"🗓️ Сегодня: {today}\n\n"  # 📅 — всегда статичный
-        f"{weather_emoji} Погода в {city_name}: {weather_text}\n\n"  # Адаптивный эмодзи погоды
-        f"💰 Курсы валют:\n{rates}\n\n"
-        f"📰 Топ новость:\n{news}"
-    )
-
-
-async def send_digest(chat_id: int):
-    try:
-        text = await build_digest(chat_id)
-        await bot.send_message(chat_id=chat_id, text=text)
-        logger.info(f"Digest sent to {chat_id}")
-    except Exception as e:
-        logger.error(f"Failed to send digest to {chat_id}: {e}")
 
 
 # ====== Клавиатуры ======
-
 
 
 # ====== Хендлеры ======
@@ -347,7 +222,7 @@ async def process_city_search(message: types.Message, state: FSMContext):
 async def action_now(callback: CallbackQuery):
     await callback.answer("🔄 Обновляю...")
     chat_id = callback.message.chat.id
-    text = await build_digest(chat_id)
+    text = await build_digest(http_session, chat_id, DEFAULT_CITY)
     await callback.message.answer(text)
 
 
@@ -547,14 +422,24 @@ async def cmd_clear_cache(message: types.Message):
 
 # ====== Планировщик ======
 def create_scheduled_job(chat_id: int, send_time_str: str):
+    """Создаёт задачу в APScheduler"""
     h, m = map(int, send_time_str.split(":"))
     send_time = dt_time(hour=h, minute=m)
 
     job_id = f"digest_{chat_id}"
-    scheduler.add_job(
+
+    # 🔥 Создаём «обёртку» с заранее переданными session, bot, default_city
+    digest_func = partial(
         send_digest,
+        http_session,  # session
+        bot,  # bot
+        default_city=DEFAULT_CITY
+    )
+
+    scheduler.add_job(
+        digest_func,  # ← передаём обёртку, а не исходную функцию
         trigger=CronTrigger(hour=send_time.hour, minute=send_time.minute),
-        args=[chat_id],
+        args=[chat_id],  # ← теперь только chat_id, остальное уже «зашито»
         id=job_id,
         replace_existing=True,
         name=job_id,
