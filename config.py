@@ -42,4 +42,4 @@ ADMIN_IDS = [
     int(x.strip())
     for x in os.getenv("ADMIN_IDS", "").split(",")
     if x.strip().isdigit()
-] # ← замени на свой chat_id!
+]

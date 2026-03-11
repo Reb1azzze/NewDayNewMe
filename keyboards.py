@@ -2,7 +2,6 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-
 def main_keyboard() -> InlineKeyboardMarkup:
     """Главное меню с настройками"""
     builder = InlineKeyboardBuilder()
@@ -32,7 +31,7 @@ def city_keyboard() -> InlineKeyboardMarkup:
 def time_keyboard() -> InlineKeyboardMarkup:
     """Выбор времени"""
     builder = InlineKeyboardBuilder()
-    times = ["06:00", "09:00", "12:00", "18:00", "21:00", "16:37"]
+    times = ["06:00", "09:00", "12:00", "18:00", "21:00", "15:06"]
     for t in times:
         builder.button(text=t, callback_data=f"time:{t}")
     builder.button(text="🔙 Назад", callback_data="settings:back")

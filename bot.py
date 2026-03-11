@@ -2,9 +2,7 @@
 import asyncio
 import logging
 import sys
-import json
-import re
-from datetime import datetime, time as dt_time
+
 from typing import Optional
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -23,25 +21,14 @@ from functools import partial
 
 from config import (
     TELEGRAM_TOKEN,
-    OPENWEATHER_API_KEY,
-    NEWS_API_KEY,
     DEFAULT_CITY,
-    DEFAULT_TIME,
-    REQUEST_TIMEOUT,
-    AVAILABLE_CITIES,
-    CACHE_TTL_WEATHER,
-    CACHE_TTL_RATES,
-    CACHE_TTL_NEWS,
     ADMIN_IDS,
 )
 from database import (
-    init_db, get_user, save_user, create_user_if_not_exists,
-    get_all_users, get_stats, search_users, update_user_field
+    init_db, get_all_users,
 )
-from cache import api_cache, get_weather_cache_key, get_rates_cache_key, get_news_cache_key
-from keyboards import main_keyboard, city_keyboard, time_keyboard
-from utils import is_admin, get_weather_emoji
-from services import build_digest, send_digest
+from services import send_digest
+from scheduler import create_scheduled_job, remove_scheduled_job
 from handlers import (
     cmd_start, cmd_my_settings, CitySearch,
     settings_city, settings_time, settings_back,
@@ -135,19 +122,9 @@ dp = Dispatcher(storage=storage)
 scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 http_session: Optional[ClientSession] = None
 
-
 # ====== FSM для поиска города ======
 class CitySearch(StatesGroup):
     waiting_for_city = State()
-
-
-# ====== API функции с кэшированием ======
-
-
-# ====== Формирование сообщения ======
-
-
-# ====== Клавиатуры ======
 
 # ====== Регистрация хендлеров ======
 # Команды
@@ -176,13 +153,8 @@ dp.message(Command("clear_cache"))(cmd_clear_cache_wrapper)
 
 # ====== Планировщик ======
 def create_scheduled_job(chat_id: int, send_time_str: str):
-    """Создаёт задачу в APScheduler"""
-    h, m = map(int, send_time_str.split(":"))
-    send_time = dt_time(hour=h, minute=m)
-
-    job_id = f"digest_{chat_id}"
-
-    # 🔥 Создаём «обёртку» с заранее переданными session, bot, default_city
+    """Обёртка для scheduler.create_scheduled_job"""
+    # Создаём «обёртку» с заранее переданными session, bot, default_city
     digest_func = partial(
         send_digest,
         http_session,  # session
@@ -190,15 +162,9 @@ def create_scheduled_job(chat_id: int, send_time_str: str):
         default_city=DEFAULT_CITY
     )
 
-    scheduler.add_job(
-        digest_func,  # ← передаём обёртку, а не исходную функцию
-        trigger=CronTrigger(hour=send_time.hour, minute=send_time.minute),
-        args=[chat_id],  # ← теперь только chat_id, остальное уже «зашито»
-        id=job_id,
-        replace_existing=True,
-        name=job_id,
-    )
-    logger.info(f"📅 Scheduled job {job_id} for {send_time_str}")
+    # Вызываем функцию из scheduler.py
+    from scheduler import create_scheduled_job as create_job
+    create_job(scheduler, digest_func, chat_id, send_time_str)
 
 
 def remove_scheduled_job(chat_id: int):

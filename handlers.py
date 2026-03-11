@@ -15,16 +15,12 @@ from database import (
     create_user_if_not_exists,
     get_all_users,
     get_stats,
-    search_users,
-    update_user_field
 )
 from cache import api_cache
 from keyboards import main_keyboard, city_keyboard, time_keyboard
-from services import build_digest
 from utils import is_admin
 
 logger = logging.getLogger(__name__)
-
 
 # ====== FSM ======
 class CitySearch(StatesGroup):
@@ -235,8 +231,6 @@ async def action_now(callback: types.CallbackQuery, session, default_city: str):
     chat_id = callback.message.chat.id
     text = await build_digest(session, chat_id, default_city)
     await callback.message.answer(text)
-
-# handlers.py — часть 3: админ-команды (добавь в конец файла)
 
 # ====== Админ-команды ======
 async def cmd_stats(message: types.Message, admin_ids: list[int]):
