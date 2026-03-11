@@ -37,6 +37,7 @@ from database import (
     get_all_users, get_stats, search_users, update_user_field
 )
 from cache import api_cache, get_weather_cache_key, get_rates_cache_key, get_news_cache_key
+from keyboards import main_keyboard, city_keyboard, time_keyboard
 
 # Команды для всех
 USER_COMMANDS = [
@@ -257,35 +258,7 @@ async def send_digest(chat_id: int):
 
 
 # ====== Клавиатуры ======
-def main_keyboard() -> types.InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="🌍 Изменить город", callback_data="settings:city"))
-    builder.row(InlineKeyboardButton(text="⏰ Изменить время", callback_data="settings:time"))
-    builder.row(InlineKeyboardButton(text="🔄 Получить сейчас", callback_data="action:now"))
-    return builder.as_markup()
 
-
-def city_keyboard() -> types.InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    # Популярные города
-    popular = [("Казань", "Kazan,RU"), ("Москва", "Moscow,RU"),
-               ("СПб", "Saint Petersburg,RU"), ("Екб", "Yekaterinburg,RU")]
-    for name, code in popular:
-        builder.button(text=name, callback_data=f"city:{code}")
-    builder.button(text="🔍 Поиск города...", callback_data="city:search")
-    builder.button(text="🔙 Назад", callback_data="settings:back")
-    builder.adjust(2)
-    return builder.as_markup()
-
-
-def time_keyboard() -> types.InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    times = ["06:00", "09:00", "12:00", "18:00", "21:00", "16:37"]
-    for t in times:
-        builder.button(text=t, callback_data=f"time:{t}")
-    builder.button(text="🔙 Назад", callback_data="settings:back")
-    builder.adjust(3)
-    return builder.as_markup()
 
 
 # ====== Хендлеры ======
