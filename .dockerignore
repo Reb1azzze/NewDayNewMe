@@ -1,0 +1,32 @@
+# ====== Git / IDE ======
+.git
+.gitignore
+*.md
+.idea/
+.vscode/
+
+# ====== Python ======
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# ====== Виртуальное окружение ======
+.venv/
+venv/
+ENV/
+
+# ====== Логи / БД / Кэш ======
+logs/
+*.log
+*.db
+*.sqlite3
+!.env.example
+
+# ====== Docker ======
+Dockerfile
+docker-compose.yml
+.dockerignore

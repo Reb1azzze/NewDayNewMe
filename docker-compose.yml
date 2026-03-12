@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .  # Собираем образ из Dockerfile в текущей папке
+    container_name: newday-bot  # Имя контейнера (удобно для логов)
+    restart: unless-stopped  # Авто-перезапуск при падении (кроме ручной остановки)
+
+    # Подключаем переменные окружения из .env файла
+    env_file:
+      - .env
+
+    # Монтируем папки для логов и БД (чтобы данные не пропали при удалении контейнера)
+    volumes:
+      - ./logs:/app/logs  # Логи сохраняются на хосте
+      - ./bot_database.db:/app/bot_database.db  # База данных сохраняется
+
+    # Логи в JSON-формате (удобно для парсинга, но можно оставить default)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Сеть (по умолчанию — bridge, можно не указывать)
+    networks:
+      - bot-network
+
+networks:
+  bot-network:
+    driver: bridge
