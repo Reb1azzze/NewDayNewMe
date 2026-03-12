@@ -5,7 +5,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).parent / "bot_database.db"
+DB_PATH = Path("/app/data/bot_database.db")  # ← Абсолютный путь внутри контейнера
 
 
 def get_connection():

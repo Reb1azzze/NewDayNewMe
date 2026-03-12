@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   bot:
     build: .  # Собираем образ из Dockerfile в текущей папке
@@ -12,8 +10,8 @@ services:
 
     # Монтируем папки для логов и БД (чтобы данные не пропали при удалении контейнера)
     volumes:
-      - ./logs:/app/logs  # Логи сохраняются на хосте
-      - ./bot_database.db:/app/bot_database.db  # База данных сохраняется
+      - ./logs:/app/logs
+      - ./data:/app/data
 
     # Логи в JSON-формате (удобно для парсинга, но можно оставить default)
     logging:
