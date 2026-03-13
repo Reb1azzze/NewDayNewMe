@@ -116,9 +116,39 @@ async def get_news(session: ClientSession) -> str:
     api_cache.set(cache_key, result, ttl=CACHE_TTL_NEWS)
     return result
 
+async def get_crypto_rates(session: ClientSession) -> str:
+    """Курсы криптовалют с CoinGecko API"""
+    cache_key = "crypto_rates"
+    cached = api_cache.get(cache_key)
+    if cached:
+        return cached
+
+    try:
+        # CoinGecko: простой эндпоинт без ключа
+        url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,the-open-network&vs_currencies=usd"
+        data = await fetch_json(session, url)
+
+        btc = data.get("bitcoin", {}).get("usd", 0)
+        eth = data.get("ethereum", {}).get("usd", 0)
+        ton = data.get("the-open-network", {}).get("usd", 0)
+
+        if btc and eth and ton:
+            result = (
+                f"🟠 BTC: ${btc:,.0f}\n"
+                f"🔷 ETH: ${eth:,.0f}\n"
+                f"🔵 TON: ${ton:,.2f}"
+            )
+        else:
+            result = "⚠️ Данные временно недоступны"
+
+    except Exception as e:
+        logger.error(f"Crypto API error: {e}")
+        result = "⚠️ Не удалось получить курсы криптовалют"
+
+    api_cache.set(cache_key, result, ttl=300)  # Кэш на 5 минут
+    return result
 
 async def build_digest(session: ClientSession, chat_id: int, default_city: str) -> str:
-    """Собирает дайджест для пользователя"""
     settings = get_user(chat_id)
     if not settings:
         settings = {"city": default_city, "send_time": "09:00"}
@@ -128,6 +158,7 @@ async def build_digest(session: ClientSession, chat_id: int, default_city: str) 
 
     weather_text, weather_emoji = await get_weather(session, city)
     rates = await get_rates(session)
+    crypto = await get_crypto_rates(session)  # ← НОВОЕ
     news = await get_news(session)
     today = datetime.now().strftime("%d.%m.%Y")
 
@@ -135,6 +166,7 @@ async def build_digest(session: ClientSession, chat_id: int, default_city: str) 
         f"🗓️ Сегодня: {today}\n\n"
         f"{weather_emoji} Погода в {city_name}: {weather_text}\n\n"
         f"💰 Курсы валют:\n{rates}\n\n"
+        f"🪙 Криптовалюты:\n{crypto}\n\n"  # ← НОВЫЙ БЛОК
         f"📰 Топ новость:\n{news}"
     )
 

@@ -18,6 +18,7 @@ from aiohttp import ClientSession, ClientTimeout
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from functools import partial
+from migrations import run_migrations
 
 from config import (
     TELEGRAM_TOKEN,
@@ -198,7 +199,7 @@ async def on_startup():
         )
 
     logger.info("📋 Commands registered for users and admins")
-
+    run_migrations()
     init_db()
     http_session = ClientSession()
     scheduler.start()
