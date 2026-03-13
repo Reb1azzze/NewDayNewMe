@@ -30,10 +30,11 @@ from database import (
 from services import send_digest
 from scheduler import create_scheduled_job, remove_scheduled_job
 from handlers import (
-    cmd_start, cmd_my_settings, CitySearch,
+    cmd_start, cmd_my_settings, CitySearch, TimeSearch,
     settings_city, settings_time, settings_back,
     start_city_search, set_city, set_time,
-    process_city_search, action_now,
+    process_city_search, process_time_input,
+    action_now,
     cmd_stats, cmd_broadcast, cmd_user_info, cmd_clear_cache
 )
 
@@ -78,6 +79,9 @@ async def cmd_user_info_wrapper(message: types.Message):
 
 async def cmd_clear_cache_wrapper(message: types.Message):
     await cmd_clear_cache(message, ADMIN_IDS)
+
+async def process_time_input_wrapper(message: types.Message, state: FSMContext):
+    await process_time_input(message, state, scheduler, create_scheduled_job, remove_scheduled_job)
 
 # ====== Логирование ======
 LOG_DIR = Path(__file__).parent / "logs"
@@ -142,6 +146,7 @@ dp.callback_query(F.data == "action:now")(action_now_wrapper)
 
 # FSM: поиск города
 dp.message(CitySearch.waiting_for_city)(process_city_search_wrapper)
+dp.message(TimeSearch.waiting_for_time)(process_time_input_wrapper)
 
 # Поиск города через текст
 

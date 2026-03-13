@@ -1,22 +1,29 @@
 # database.py
 import sqlite3
 import logging
+import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path("/app/data/bot_database.db")  # ← Абсолютный путь внутри контейнера
+# Универсальный путь к БД:
+# 1. Если есть переменная окружения DB_PATH (для Docker) — используем её
+# 2. Иначе — локальная папка рядом с файлом
+DB_PATH = Path(os.getenv("DB_PATH", Path(__file__).parent / "bot_database.db"))
 
 
 def get_connection():
-    """Возвращает подключение к БД с поддержкой строк-ключей"""
+    """Возвращает подключение к БД"""
+    # Создаём папку, если её нет (важно для Docker)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
     conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row  # Позволяет обращаться к колонкам по имени
+    conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
-    """Инициализирует базу данных: создаёт таблицу, если её нет"""
+    """Инициализирует базу данных"""
     with get_connection() as conn:
         conn.execute("""
                      CREATE TABLE IF NOT EXISTS users
@@ -62,7 +69,7 @@ def get_user(chat_id: int) -> dict | None:
 
 
 def save_user(chat_id: int, city: str, send_time: str):
-    """Сохраняет или обновляет настройки пользователя (UPSERT)"""
+    """Сохраняет или обновляет настройки пользователя"""
     with get_connection() as conn:
         conn.execute("""
             INSERT OR REPLACE INTO users (chat_id, city, send_time, updated_at)
@@ -80,7 +87,7 @@ def create_user_if_not_exists(chat_id: int, city: str, send_time: str):
 
 
 def get_all_users() -> list[dict]:
-    """Возвращает всех пользователей (для админки/статистики)"""
+    """Возвращает всех пользователей"""
     with get_connection() as conn:
         cursor = conn.execute("SELECT chat_id, city, send_time, created_at FROM users")
         return [dict(row) for row in cursor.fetchall()]
@@ -97,11 +104,9 @@ def delete_user(chat_id: int):
 def get_stats() -> dict:
     """Возвращает статистику по пользователям"""
     with get_connection() as conn:
-        # Всего пользователей
         cursor = conn.execute("SELECT COUNT(*) FROM users")
         total_users = cursor.fetchone()[0]
 
-        # Топ городов
         cursor = conn.execute("""
                               SELECT city, COUNT(*) as count
                               FROM users
@@ -111,7 +116,6 @@ def get_stats() -> dict:
                               """)
         top_cities = [dict(row) for row in cursor.fetchall()]
 
-        # Распределение по времени
         cursor = conn.execute("""
                               SELECT send_time, COUNT(*) as count
                               FROM users
@@ -120,7 +124,6 @@ def get_stats() -> dict:
                               """)
         time_distribution = [dict(row) for row in cursor.fetchall()]
 
-        # Новые пользователи за сегодня
         cursor = conn.execute("""
                               SELECT COUNT(*)
                               FROM users
@@ -149,7 +152,7 @@ def search_users(query: str) -> list[dict]:
 
 
 def update_user_field(chat_id: int, field: str, value: str):
-    """Обновляет одно поле пользователя (для админки)"""
+    """Обновляет одно поле пользователя"""
     allowed_fields = ["city", "send_time"]
     if field not in allowed_fields:
         raise ValueError(f"Field {field} not allowed")

@@ -7,8 +7,9 @@ services:
     # Подключаем переменные окружения из .env файла
     env_file:
       - .env
-
     # Монтируем папки для логов и БД (чтобы данные не пропали при удалении контейнера)
+    environment:
+      - DB_PATH=/app/data/bot_database.db
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data

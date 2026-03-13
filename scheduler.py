@@ -19,7 +19,7 @@ def create_scheduled_job(
     job_id = f"digest_{chat_id}"
     scheduler.add_job(
         send_digest_func,
-        trigger=CronTrigger(hour=send_time.hour, minute=send_time.minute),
+        trigger=CronTrigger(hour=send_time.hour, minute=send_time.minute, timezone="Europe/Moscow"),
         args=[chat_id],
         id=job_id,
         replace_existing=True,

@@ -7,8 +7,9 @@ from aiogram import F, types
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-from config import DEFAULT_CITY, AVAILABLE_CITIES, ADMIN_IDS  # ← ADMIN_IDS тоже нужен
+from config import DEFAULT_CITY, AVAILABLE_CITIES, ADMIN_IDS
 from database import (
     get_user,
     save_user,
@@ -25,6 +26,9 @@ logger = logging.getLogger(__name__)
 # ====== FSM ======
 class CitySearch(StatesGroup):
     waiting_for_city = State()
+
+class TimeSearch(StatesGroup):
+    waiting_for_time = State()
 
 
 # ====== Команды ======
@@ -81,14 +85,28 @@ async def settings_city(callback: types.CallbackQuery):
         reply_markup=city_keyboard(),
     )
 
-
-async def settings_time(callback: types.CallbackQuery):
-    """Показать меню выбора времени"""
+async def settings_time(callback: types.CallbackQuery, state: FSMContext):
+    """Запросить ввод времени"""
     await callback.answer()
-    await callback.message.edit_text(
-        "⏰ Во сколько присылать дайджест?",
-        reply_markup=time_keyboard(),
+
+    # Клавиатура с быстрой отменой
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="❌ Отмена")]],
+        resize_keyboard=True,
+        one_time_keyboard=True
     )
+
+    await callback.message.edit_text(
+        "⏰ Во сколько присылать дайджест?\n\n"
+        "Введите время в формате **ЧЧ:ММ**\n\n"
+        "Примеры: `09:00`, `14:30`, `23:15`",
+        parse_mode="Markdown"
+    )
+    await callback.message.answer(
+        "✍️ Напишите время:",
+        reply_markup=keyboard
+    )
+    await state.set_state(TimeSearch.waiting_for_time)
 
 
 async def settings_back(callback: types.CallbackQuery):
@@ -231,6 +249,62 @@ async def action_now(callback: types.CallbackQuery, session, default_city: str):
     chat_id = callback.message.chat.id
     text = await build_digest(session, chat_id, default_city)
     await callback.message.answer(text)
+
+
+# handlers.py — добавь новую функцию:
+
+async def process_time_input(
+        message: types.Message,
+        state: FSMContext,
+        scheduler,
+        create_job_func,
+        remove_job_func
+):
+    """Обработать ввод времени пользователем"""
+    time_input = message.text.strip()
+    chat_id = message.chat.id
+
+    # Проверка на отмену
+    if time_input == "❌ Отмена":
+        await message.answer(
+            "⚙️ Настройки дайджеста:",
+            reply_markup=main_keyboard(),
+        )
+        await state.clear()
+        return
+
+    # Валидация формата ЧЧ:ММ
+    import re
+    if not re.match(r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$", time_input):
+        await message.answer(
+            "❌ Неверный формат. Используйте **ЧЧ:ММ**\n\n"
+            "Примеры: `09:00`, `14:30`, `23:15`\n\n"
+            "Попробуйте ещё раз:",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Нормализация (9:00 → 09:00)
+    time_parts = time_input.split(":")
+    time_str = f"{int(time_parts[0]):02d}:{time_parts[1]}"
+
+    # Сохраняем
+    settings = get_user(chat_id) or {"city": DEFAULT_CITY, "send_time": "09:00"}
+    settings["send_time"] = time_str
+    save_user(chat_id, settings["city"], settings["send_time"])
+
+    remove_job_func(chat_id)
+    create_job_func(chat_id, time_str)
+
+    # Убираем клавиатуру
+    await message.answer(
+        f"✅ Дайджест теперь в **{time_str}**\n\n⚙️ Настройки:",
+        reply_markup=main_keyboard(),
+        parse_mode="Markdown"
+    )
+    logger.info(f"Time set: {time_str} for {chat_id}")
+
+    await state.clear()
 
 # ====== Админ-команды ======
 async def cmd_stats(message: types.Message, admin_ids: list[int]):
