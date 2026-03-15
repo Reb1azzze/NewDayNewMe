@@ -199,8 +199,8 @@ async def on_startup():
         )
 
     logger.info("📋 Commands registered for users and admins")
-    run_migrations()
     init_db()
+    run_migrations()
     http_session = ClientSession()
     scheduler.start()
 
