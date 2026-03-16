@@ -1,13 +1,13 @@
 # handlers.py
 import logging
 import asyncio
+import re
 from datetime import datetime
 
 from aiogram import F, types
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 from config import DEFAULT_CITY, AVAILABLE_CITIES, ADMIN_IDS
 from database import (
@@ -89,22 +89,12 @@ async def settings_time(callback: types.CallbackQuery, state: FSMContext):
     """Запросить ввод времени"""
     await callback.answer()
 
-    # Клавиатура с быстрой отменой
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="❌ Отмена")]],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-
     await callback.message.edit_text(
         "⏰ Во сколько присылать дайджест?\n\n"
         "Введите время в формате **ЧЧ:ММ**\n\n"
-        "Примеры: `09:00`, `14:30`, `23:15`",
+        "Примеры: `09:00`, `14:30`, `23:15`\n\n"
+        "Или /cancel для отмены",
         parse_mode="Markdown"
-    )
-    await callback.message.answer(
-        "✍️ Напишите время:",
-        reply_markup=keyboard
     )
     await state.set_state(TimeSearch.waiting_for_time)
 
@@ -250,9 +240,6 @@ async def action_now(callback: types.CallbackQuery, session, default_city: str):
     text = await build_digest(session, chat_id, default_city)
     await callback.message.answer(text)
 
-
-# handlers.py — добавь новую функцию:
-
 async def process_time_input(
         message: types.Message,
         state: FSMContext,
@@ -264,22 +251,12 @@ async def process_time_input(
     time_input = message.text.strip()
     chat_id = message.chat.id
 
-    # Проверка на отмену
-    if time_input == "❌ Отмена":
-        await message.answer(
-            "⚙️ Настройки дайджеста:",
-            reply_markup=main_keyboard(),
-        )
-        await state.clear()
-        return
-
     # Валидация формата ЧЧ:ММ
-    import re
     if not re.match(r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$", time_input):
         await message.answer(
             "❌ Неверный формат. Используйте **ЧЧ:ММ**\n\n"
             "Примеры: `09:00`, `14:30`, `23:15`\n\n"
-            "Попробуйте ещё раз:",
+            "Или /cancel для отмены",
             parse_mode="Markdown"
         )
         return
@@ -296,7 +273,7 @@ async def process_time_input(
     remove_job_func(chat_id)
     create_job_func(chat_id, time_str)
 
-    # Убираем клавиатуру
+    # Возвращаем главное меню
     await message.answer(
         f"✅ Дайджест теперь в **{time_str}**\n\n⚙️ Настройки:",
         reply_markup=main_keyboard(),
@@ -406,3 +383,20 @@ async def cmd_clear_cache(message: types.Message, admin_ids: list[int]):
     count = api_cache.clear()
     await message.answer(f"🧹 Кэш очищен: {count} записей удалено")
     logger.info(f"Cache cleared by admin {message.from_user.id}")
+
+async def cmd_cancel(message: types.Message, state: FSMContext):
+    """Отменить текущий ввод (город или время)"""
+    current_state = await state.get_state()
+
+    if current_state in [CitySearch.waiting_for_city.state, TimeSearch.waiting_for_time.state]:
+        await state.clear()
+        await message.answer(
+            "❌ Отменено.\n\n⚙️ Настройки:",
+            reply_markup=main_keyboard()
+        )
+    else:
+        # Если не в режиме ввода — просто покажем меню
+        await message.answer(
+            "⚙️ Настройки дайджеста:",
+            reply_markup=main_keyboard()
+        )

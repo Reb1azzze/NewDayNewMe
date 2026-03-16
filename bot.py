@@ -35,7 +35,7 @@ from handlers import (
     settings_city, settings_time, settings_back,
     start_city_search, set_city, set_time,
     process_city_search, process_time_input,
-    action_now,
+    action_now, cmd_cancel,
     cmd_stats, cmd_broadcast, cmd_user_info, cmd_clear_cache
 )
 
@@ -43,6 +43,7 @@ from handlers import (
 USER_COMMANDS = [
     BotCommand(command="start", description="🚀 Запустить бота"),
     BotCommand(command="my_settings", description="⚙️ Мои настройки"),
+    BotCommand(command="cancel", description="❌ Отменить ввод")
 ]
 
 # Команды для админов
@@ -83,6 +84,9 @@ async def cmd_clear_cache_wrapper(message: types.Message):
 
 async def process_time_input_wrapper(message: types.Message, state: FSMContext):
     await process_time_input(message, state, scheduler, create_scheduled_job, remove_scheduled_job)
+
+async def cmd_cancel_wrapper(message: types.Message, state: FSMContext):
+    await cmd_cancel(message, state)
 
 # ====== Логирование ======
 LOG_DIR = Path(__file__).parent / "logs"
@@ -135,6 +139,7 @@ class CitySearch(StatesGroup):
 # Команды
 dp.message(CommandStart())(cmd_start_wrapper)
 dp.message(Command("my_settings"))(cmd_my_settings)
+dp.message(Command("cancel"))(cmd_cancel_wrapper)
 
 # Callbacks: настройки
 dp.callback_query(F.data == "settings:city")(settings_city)
